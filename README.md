@@ -4,6 +4,8 @@ An Electron app to migrate your GitHub repositories to a Gitea instance.
 
 ![Gitea Migrator](https://img.shields.io/badge/Electron-28.0.0-blue) ![License](https://img.shields.io/badge/License-MIT-green)
 
+![Gitea Migrator Screenshot](app.webp)
+
 ## Features
 
 - **Secure Authentication** - Connect with GitHub and Gitea using personal access tokens
