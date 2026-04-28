@@ -565,6 +565,65 @@ input::placeholder {
   gap: 16px;
 }
 
+.migration-options {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+}
+
+.mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mode-option {
+  cursor: pointer;
+}
+
+.mode-option input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  padding: 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.mode-card strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.mode-card span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.mode-option:hover .mode-card,
+.mode-option input:checked + .mode-card {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--accent-blue-bg);
+}
+
+.mirror-settings {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-primary);
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;

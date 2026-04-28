@@ -9,8 +9,8 @@ contextBridge.exposeInMainWorld('api', {
   giteaValidateConnection: (url, token) => ipcRenderer.invoke('gitea:validateConnection', { url, token }),
 
   // Migration
-  migrateRepos: (githubToken, giteaUrl, giteaToken, repos) => 
-    ipcRenderer.invoke('migrate:repos', { githubToken, giteaUrl, giteaToken, repos }),
+  migrateRepos: (githubToken, giteaUrl, giteaToken, repos, options = {}) =>
+    ipcRenderer.invoke('migrate:repos', { githubToken, giteaUrl, giteaToken, repos, ...options }),
 
   // Progress listener
   onMigrationProgress: (callback) => {

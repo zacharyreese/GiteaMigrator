@@ -187,6 +187,33 @@
           </div>
         </div>
 
+        <div class="migration-options">
+          <div class="mode-options">
+            <label class="mode-option">
+              <input type="radio" name="migration-mode" value="copy" checked>
+              <span class="mode-card">
+                <strong>One-time copy</strong>
+                <span>Clone from GitHub and push the current branches and tags to Gitea.</span>
+              </span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="migration-mode" value="mirror">
+              <span class="mode-card">
+                <strong>Live mirror</strong>
+                <span>Create a Gitea pull mirror that periodically fetches new GitHub commits.</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="mirror-settings" id="mirror-settings" hidden>
+            <div class="input-group">
+              <label for="mirror-interval">Mirror interval</label>
+              <input type="text" id="mirror-interval" value="10m" autocomplete="off">
+              <small>Gitea enforces the instance minimum interval, usually <code>10m</code>. Live mirrors can only be created for new Gitea repositories.</small>
+            </div>
+          </div>
+        </div>
+
         <div class="repos-list" id="repos-list">
           <div class="loading-spinner">
             <div class="spinner"></div>
@@ -202,7 +229,7 @@
             <span>Back</span>
           </button>
           <button class="btn btn-success" id="start-migration" disabled>
-            <span>Migrate Selected</span>
+            <span id="start-migration-label">Migrate Selected</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="16 16 12 12 8 16"/>
               <line x1="12" y1="12" x2="12" y2="21"/>

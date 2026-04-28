@@ -6,6 +6,84 @@ const os = require('os');
 
 let mainWindow;
 
+function normalizeGiteaUrl(url) {
+  return url.replace(/\/$/, '');
+}
+
+function sendMigrationProgress(repo, status, message) {
+  mainWindow.webContents.send('migrate:progress', {
+    repo,
+    status,
+    message
+  });
+}
+
+async function readApiError(response) {
+  const text = await response.text().catch(() => '');
+  if (!text) return response.status;
+
+  try {
+    const errorData = JSON.parse(text);
+    return errorData.message || errorData.errors || response.status;
+  } catch {
+    return text;
+  }
+}
+
+async function fetchGiteaUser(giteaUrl, giteaToken) {
+  const userResponse = await fetch(normalizeGiteaUrl(giteaUrl) + '/api/v1/user', {
+    headers: {
+      'Authorization': `token ${giteaToken}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  if (!userResponse.ok) {
+    throw new Error(`Failed to fetch Gitea user: ${await readApiError(userResponse)}`);
+  }
+
+  return userResponse.json();
+}
+
+async function createLiveMirror({ githubToken, giteaUrl, giteaToken, giteaUser, repo, mirrorInterval }) {
+  sendMigrationProgress(repo.name, 'creating-mirror', `Creating live mirror for ${repo.name}...`);
+
+  const migrateResponse = await fetch(normalizeGiteaUrl(giteaUrl) + '/api/v1/repos/migrate', {
+    method: 'POST',
+    headers: {
+      'Authorization': `token ${giteaToken}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      clone_addr: repo.clone_url,
+      auth_token: githubToken,
+      repo_name: repo.name,
+      repo_owner: giteaUser.login || giteaUser.username,
+      service: 'github',
+      mirror: true,
+      mirror_interval: mirrorInterval,
+      private: repo.private,
+      description: repo.description || ''
+    })
+  });
+
+  if (!migrateResponse.ok) {
+    const errorMessage = await readApiError(migrateResponse);
+    if (migrateResponse.status === 409) {
+      throw new Error('Repository already exists on Gitea. Pull mirrors can only be created for new repositories.');
+    }
+
+    throw new Error(`Failed to create live mirror: ${errorMessage}`);
+  }
+
+  sendMigrationProgress(
+    repo.name,
+    'mirror-ready',
+    `Live mirror ready. Gitea will pull updates every ${mirrorInterval}.`
+  );
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -103,7 +181,7 @@ ipcMain.handle('github:validateToken', async (event, token) => {
 // Gitea API calls
 ipcMain.handle('gitea:validateConnection', async (event, { url, token }) => {
   try {
-    const apiUrl = url.replace(/\/$/, '') + '/api/v1/user';
+    const apiUrl = normalizeGiteaUrl(url) + '/api/v1/user';
     console.log('Attempting to connect to Gitea:', apiUrl);
     
     const response = await fetch(apiUrl, {
@@ -131,12 +209,25 @@ ipcMain.handle('gitea:validateConnection', async (event, { url, token }) => {
 });
 
 // Migration logic
-ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToken, repos }) => {
+ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToken, repos, mode = 'copy', mirrorInterval = '10m' }) => {
   const results = [];
   const tempDir = path.join(os.tmpdir(), 'gitea-migrator');
+  const isLiveMirror = mode === 'mirror';
+  let giteaUser;
+
+  try {
+    giteaUser = await fetchGiteaUser(giteaUrl, giteaToken);
+  } catch (error) {
+    for (const repo of repos) {
+      sendMigrationProgress(repo.name, 'error', `Failed to migrate ${repo.name}: ${error.message}`);
+      results.push({ repo: repo.name, success: false, error: error.message });
+    }
+
+    return { results };
+  }
 
   // Ensure temp directory exists
-  if (!fs.existsSync(tempDir)) {
+  if (!isLiveMirror && !fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
@@ -144,12 +235,14 @@ ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToke
     const repoDir = path.join(tempDir, repo.name);
 
     try {
+      if (isLiveMirror) {
+        await createLiveMirror({ githubToken, giteaUrl, giteaToken, giteaUser, repo, mirrorInterval });
+        results.push({ repo: repo.name, success: true });
+        continue;
+      }
+
       // Notify progress
-      mainWindow.webContents.send('migrate:progress', {
-        repo: repo.name,
-        status: 'cloning',
-        message: `Cloning ${repo.name}...`
-      });
+      sendMigrationProgress(repo.name, 'cloning', `Cloning ${repo.name}...`);
 
       // Clean up if exists
       if (fs.existsSync(repoDir)) {
@@ -161,13 +254,9 @@ ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToke
       await git.clone(repo.clone_url.replace('https://', `https://${githubToken}@`), repoDir, ['--mirror']);
 
       // Create repo on Gitea
-      mainWindow.webContents.send('migrate:progress', {
-        repo: repo.name,
-        status: 'creating',
-        message: `Creating ${repo.name} on Gitea...`
-      });
+      sendMigrationProgress(repo.name, 'creating', `Creating ${repo.name} on Gitea...`);
 
-      const giteaApiUrl = giteaUrl.replace(/\/$/, '') + '/api/v1/user/repos';
+      const giteaApiUrl = normalizeGiteaUrl(giteaUrl) + '/api/v1/user/repos';
       const createResponse = await fetch(giteaApiUrl, {
         method: 'POST',
         headers: {
@@ -184,39 +273,21 @@ ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToke
       });
 
       if (!createResponse.ok) {
-        const errorData = await createResponse.json().catch(() => ({}));
-        if (createResponse.status === 409 || (errorData.message && errorData.message.includes('already exists'))) {
+        const errorMessage = await readApiError(createResponse);
+        if (createResponse.status === 409 || String(errorMessage).includes('already exists')) {
           // Repo already exists, continue with push
-          mainWindow.webContents.send('migrate:progress', {
-            repo: repo.name,
-            status: 'exists',
-            message: `${repo.name} already exists on Gitea, pushing updates...`
-          });
+          sendMigrationProgress(repo.name, 'exists', `${repo.name} already exists on Gitea, pushing updates...`);
         } else {
-          throw new Error(`Failed to create repo: ${errorData.message || createResponse.status}`);
+          throw new Error(`Failed to create repo: ${errorMessage}`);
         }
       }
 
-      const giteaRepoData = await createResponse.json().catch(() => null);
-
-      // Get Gitea user for repo URL
-      const userResponse = await fetch(giteaUrl.replace(/\/$/, '') + '/api/v1/user', {
-        headers: {
-          'Authorization': `token ${giteaToken}`,
-          'Accept': 'application/json'
-        }
-      });
-      const giteaUser = await userResponse.json();
-
       // Push to Gitea
-      mainWindow.webContents.send('migrate:progress', {
-        repo: repo.name,
-        status: 'pushing',
-        message: `Pushing ${repo.name} to Gitea...`
-      });
+      sendMigrationProgress(repo.name, 'pushing', `Pushing ${repo.name} to Gitea...`);
 
-      const giteaRepoUrl = `${giteaUrl.replace(/\/$/, '')}/${giteaUser.login}/${repo.name}.git`;
-      const giteaUrlWithAuth = giteaRepoUrl.replace('https://', `https://${giteaUser.login}:${giteaToken}@`).replace('http://', `http://${giteaUser.login}:${giteaToken}@`);
+      const giteaLogin = giteaUser.login || giteaUser.username;
+      const giteaRepoUrl = `${normalizeGiteaUrl(giteaUrl)}/${giteaLogin}/${repo.name}.git`;
+      const giteaUrlWithAuth = giteaRepoUrl.replace('https://', `https://${giteaLogin}:${giteaToken}@`).replace('http://', `http://${giteaLogin}:${giteaToken}@`);
 
       const repoGit = simpleGit(repoDir);
       await repoGit.addRemote('gitea', giteaUrlWithAuth).catch(() => {
@@ -232,11 +303,7 @@ ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToke
       // Cleanup
       fs.rmSync(repoDir, { recursive: true, force: true });
 
-      mainWindow.webContents.send('migrate:progress', {
-        repo: repo.name,
-        status: 'complete',
-        message: `Successfully migrated ${repo.name}`
-      });
+      sendMigrationProgress(repo.name, 'complete', `Successfully migrated ${repo.name}`);
 
       results.push({ repo: repo.name, success: true });
     } catch (error) {
@@ -245,11 +312,7 @@ ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToke
         fs.rmSync(repoDir, { recursive: true, force: true });
       }
 
-      mainWindow.webContents.send('migrate:progress', {
-        repo: repo.name,
-        status: 'error',
-        message: `Failed to migrate ${repo.name}: ${error.message}`
-      });
+      sendMigrationProgress(repo.name, 'error', `Failed to migrate ${repo.name}: ${error.message}`);
 
       results.push({ repo: repo.name, success: false, error: error.message });
     }

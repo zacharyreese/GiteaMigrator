@@ -7,6 +7,8 @@ const state = {
   giteaUser: null,
   repos: [],
   selectedRepos: new Set(),
+  migrationMode: 'copy',
+  mirrorInterval: '10m',
   isConnected: {
     github: false,
     gitea: false
@@ -53,6 +55,10 @@ const elements = {
   reposList: document.getElementById('repos-list'),
   backToConnect: document.getElementById('back-to-connect'),
   startMigration: document.getElementById('start-migration'),
+  startMigrationLabel: document.getElementById('start-migration-label'),
+  migrationModeOptions: document.querySelectorAll('input[name="migration-mode"]'),
+  mirrorSettings: document.getElementById('mirror-settings'),
+  mirrorInterval: document.getElementById('mirror-interval'),
   
   // Migration
   migrationProgress: document.getElementById('migration-progress'),
@@ -66,6 +72,7 @@ document.addEventListener('DOMContentLoaded', init);
 
 function init() {
   setupEventListeners();
+  updateMigrationMode();
   setupProgressListener();
 }
 
@@ -111,6 +118,14 @@ function setupEventListeners() {
   // Select all
   elements.selectAll.addEventListener('change', toggleSelectAll);
 
+  // Migration mode
+  elements.migrationModeOptions.forEach(option => {
+    option.addEventListener('change', updateMigrationMode);
+  });
+  elements.mirrorInterval.addEventListener('input', () => {
+    state.mirrorInterval = elements.mirrorInterval.value.trim() || '10m';
+  });
+
   // Back buttons
   elements.backToConnect.addEventListener('click', () => switchSection('connect'));
   elements.backToRepos.addEventListener('click', () => {
@@ -137,6 +152,17 @@ function setupEventListeners() {
     e.preventDefault();
     window.api.openExternal('https://github.com/settings/tokens/new?scopes=repo&description=Gitea%20Migrator');
   });
+}
+
+function updateMigrationMode() {
+  const selectedMode = [...elements.migrationModeOptions].find(option => option.checked);
+  state.migrationMode = selectedMode ? selectedMode.value : 'copy';
+  state.mirrorInterval = elements.mirrorInterval.value.trim() || '10m';
+  elements.mirrorInterval.value = state.mirrorInterval;
+
+  const isMirrorMode = state.migrationMode === 'mirror';
+  elements.mirrorSettings.hidden = !isMirrorMode;
+  elements.startMigrationLabel.textContent = isMirrorMode ? 'Create Live Mirrors' : 'Migrate Selected';
 }
 
 function setupProgressListener() {
@@ -422,21 +448,31 @@ async function startMigration() {
     </div>
   `).join('');
 
-  elements.migrationSubtitle.textContent = `Migrating ${selectedRepos.length} repositories to Gitea...`;
+  updateMigrationMode();
+  const isMirrorMode = state.migrationMode === 'mirror';
+  elements.migrationSubtitle.textContent = isMirrorMode
+    ? `Creating ${selectedRepos.length} live mirrors on Gitea...`
+    : `Migrating ${selectedRepos.length} repositories to Gitea...`;
 
   // Start migration
   const result = await window.api.migrateRepos(
     state.githubToken,
     state.giteaUrl,
     state.giteaToken,
-    selectedRepos
+    selectedRepos,
+    {
+      mode: state.migrationMode,
+      mirrorInterval: state.mirrorInterval
+    }
   );
 
   // Show completion
   const successful = result.results.filter(r => r.success).length;
   const failed = result.results.filter(r => !r.success).length;
 
-  elements.migrationSubtitle.textContent = `Migration complete: ${successful} succeeded, ${failed} failed`;
+  elements.migrationSubtitle.textContent = isMirrorMode
+    ? `Live mirror setup complete: ${successful} succeeded, ${failed} failed`
+    : `Migration complete: ${successful} succeeded, ${failed} failed`;
   elements.backToRepos.style.display = 'flex';
   elements.newMigration.style.display = 'flex';
 }
@@ -455,9 +491,10 @@ function updateMigrationProgress(data) {
   // Update icon and progress based on status
   switch (data.status) {
     case 'cloning':
+    case 'creating-mirror':
       icon.className = 'progress-icon in-progress';
       icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
-      progressBar.style.width = '25%';
+      progressBar.style.width = data.status === 'creating-mirror' ? '50%' : '25%';
       break;
     case 'creating':
     case 'exists':
@@ -467,6 +504,7 @@ function updateMigrationProgress(data) {
       progressBar.style.width = '75%';
       break;
     case 'complete':
+    case 'mirror-ready':
       icon.className = 'progress-icon complete';
       icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
       progressBar.style.width = '100%';

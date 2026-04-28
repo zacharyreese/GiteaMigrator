@@ -11,7 +11,8 @@ An Electron app to migrate your GitHub repositories to a Gitea instance.
 - **Secure Authentication** - Connect with GitHub and Gitea using personal access tokens
 - **Repository Listing** - View all your GitHub repositories with search and filtering
 - **Bulk Selection** - Select individual repos or all at once
-- **Mirror Migration** - Full mirror clone including all branches, tags, and history
+- **One-time Migration** - Full mirror clone including all branches, tags, and history
+- **Live Mirror Migration** - Create Gitea pull mirrors that keep fetching new GitHub commits
 - **Real-time Progress** - Watch the migration progress in real-time
 
 ## Getting Started
@@ -58,9 +59,12 @@ bun start
 1. **Connect GitHub** - Enter your GitHub personal access token
 2. **Connect Gitea** - Enter your Gitea instance URL and access token
 3. **Select Repositories** - Browse and select the repos you want to migrate
-4. **Migrate** - Click "Migrate Selected" and watch the progress
+4. **Choose Migration Mode** - Pick either a one-time copy or a live mirror
+5. **Migrate** - Click "Migrate Selected" or "Create Live Mirrors" and watch the progress
 
 ## How It Works
+
+### One-time copy
 
 The migrator performs a **full clone** of each repository:
 
@@ -71,9 +75,22 @@ The migrator performs a **full clone** of each repository:
 
 **Note:** Your GitHub repositories are NOT deleted or modified. This is a copy operation only. GitHub-specific pull request refs are excluded as Gitea doesn't support them.
 
+### Live mirror
+
+Live mirror mode uses Gitea's official repository migration API to create a **pull mirror**:
+
+1. Sends the GitHub repository URL and token to Gitea's `/api/v1/repos/migrate` endpoint
+2. Creates a new Gitea repository with `mirror: true`
+3. Lets Gitea periodically pull new branches, tags, and commits from GitHub
+
+The default requested mirror interval is `10m`. Your Gitea instance may enforce its own mirror settings, such as `mirror.MIN_INTERVAL` and `mirror.DEFAULT_INTERVAL`, so actual sync timing is controlled by Gitea.
+
+**Important:** Gitea can only create pull mirrors for repositories that do not already exist on your instance. If a repository already exists, use one-time copy mode or delete/rename the existing Gitea repository before creating a live mirror.
+
 ## Security
 
-- Tokens are never stored persistently - they only exist in memory during the session
+- In one-time copy mode, tokens are not stored by this app and only exist in memory during the session
+- In live mirror mode, your GitHub token is sent to Gitea so Gitea can retain credentials and keep pulling future updates
 - All communication uses HTTPS
 - Context isolation for security
 
