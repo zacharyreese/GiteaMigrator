@@ -34,25 +34,28 @@ bun start
 
 ### Creating Access Tokens
 
-#### GitHub Personal Access Token
+#### GitHub Fine-grained Personal Access Token
 
-1. Go to [GitHub Settings > Developer Settings > Personal Access Tokens](https://github.com/settings/tokens/new)
-2. Select **"Generate new token (classic)"**
-3. Give it a descriptive name (e.g., "Gitea Migrator")
-4. Select the `repo` scope (full control of private repositories)
+1. Go to [GitHub Settings > Developer Settings > Fine-grained tokens](https://github.com/settings/personal-access-tokens/new)
+2. Give it a descriptive name (e.g., "Gitea Migrator") and an expiration
+3. Under **Repository access**, choose **All repositories** (or select the specific private repos you want to migrate). The default is **Public repositories** only, which is why your private repos wouldn't show up in the list.
+4. Under **Repository permissions**, grant:
+   - **Contents** → Read-only
+   - **Metadata** → Read-only (required, granted automatically)
 5. Click **Generate token**
-6. Copy the token (starts with `ghp_`)
+6. Copy the token (starts with `github_pat_`)
+
+> **Live mirror tip:** Gitea stores and reuses this token to keep fetching new commits. If you set an expiration, rotate the token before it lapses, or choose **No expiration** for an uninterrupted mirror. A one-time copy no longer needs the token once the migration finishes.
 
 #### Gitea Access Token
 
-1. Go to your Gitea instance
-2. Navigate to **Settings → Applications → Access Tokens**
-3. Enter a token name (e.g., "Gitea Migrator")
-4. Select the following scopes:
-   - `read:user` - Required to verify connection
+1. Go to your Gitea instance and open `<your-instance>/user/settings/applications`
+2. Under **Manage Access Tokens**, enter a token name (e.g., "Gitea Migrator")
+3. Select the following scopes:
+   - `write:user` - Required to verify the connection and create repos under your account
    - `write:repository` - Required to create repositories
-5. Click **Generate Token**
-6. Copy the token
+4. Click **Generate Token**
+5. Copy the token
 
 ## Usage
 

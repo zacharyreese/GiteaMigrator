@@ -8,6 +8,7 @@ const state = {
   repos: [],
   selectedRepos: new Set(),
   migrationMode: 'copy',
+  repoModes: {},
   mirrorInterval: '10m',
   isConnected: {
     github: false,
@@ -43,6 +44,8 @@ const elements = {
   giteaStatus: document.getElementById('gitea-status'),
   connectGitea: document.getElementById('connect-gitea'),
   statusGitea: document.getElementById('status-gitea'),
+  giteaTokenHelp: document.getElementById('gitea-token-help'),
+  giteaTokenHelpUrl: document.getElementById('gitea-token-help-url'),
   
   // Proceed
   proceedSection: document.getElementById('proceed-section'),
@@ -73,7 +76,18 @@ document.addEventListener('DOMContentLoaded', init);
 function init() {
   setupEventListeners();
   updateMigrationMode();
+  updateGiteaTokenHelp();
   setupProgressListener();
+}
+
+// Gitea token help line: <your-instance>/user/settings/applications
+function getGiteaApplicationsUrl() {
+  const base = elements.giteaUrl.value.trim().replace(/\/$/, '');
+  return base ? `${base}/user/settings/applications` : '<your-instance>/user/settings/applications';
+}
+
+function updateGiteaTokenHelp() {
+  elements.giteaTokenHelpUrl.textContent = getGiteaApplicationsUrl();
 }
 
 function setupEventListeners() {
@@ -106,6 +120,14 @@ function setupEventListeners() {
     if (e.key === 'Enter') connectGitea();
   });
 
+  // Gitea token help line updates live with the instance URL
+  elements.giteaUrl.addEventListener('input', updateGiteaTokenHelp);
+  elements.giteaTokenHelp.addEventListener('click', (e) => {
+    e.preventDefault();
+    const base = elements.giteaUrl.value.trim().replace(/\/$/, '');
+    if (base) window.api.openExternal(`${base}/user/settings/applications`);
+  });
+
   // Proceed to repos
   elements.proceedToRepos.addEventListener('click', () => {
     switchSection('repos');
@@ -120,7 +142,12 @@ function setupEventListeners() {
 
   // Migration mode
   elements.migrationModeOptions.forEach(option => {
-    option.addEventListener('change', updateMigrationMode);
+    option.addEventListener('change', () => {
+      updateMigrationMode();
+      if (state.repos.length > 0) {
+        renderRepos(elements.repoSearch.value);
+      }
+    });
   });
   elements.mirrorInterval.addEventListener('input', () => {
     state.mirrorInterval = elements.mirrorInterval.value.trim() || '10m';
@@ -150,7 +177,7 @@ function setupEventListeners() {
   // GitHub token help
   document.getElementById('github-token-help').addEventListener('click', (e) => {
     e.preventDefault();
-    window.api.openExternal('https://github.com/settings/tokens/new?scopes=repo&description=Gitea%20Migrator');
+    window.api.openExternal('https://github.com/settings/personal-access-tokens/new');
   });
 }
 
@@ -159,10 +186,44 @@ function updateMigrationMode() {
   state.migrationMode = selectedMode ? selectedMode.value : 'copy';
   state.mirrorInterval = elements.mirrorInterval.value.trim() || '10m';
   elements.mirrorInterval.value = state.mirrorInterval;
+  updateMigrationUI();
+}
 
-  const isMirrorMode = state.migrationMode === 'mirror';
-  elements.mirrorSettings.hidden = !isMirrorMode;
-  elements.startMigrationLabel.textContent = isMirrorMode ? 'Create Live Mirrors' : 'Migrate Selected';
+// Effective mode for a repo: per-repo override if set, otherwise the global default.
+function getRepoMode(repo) {
+  return state.repoModes[repo.id] || state.migrationMode;
+}
+
+function getSelectedModeBreakdown() {
+  const selected = state.repos.filter(repo => state.selectedRepos.has(repo.id));
+  let copy = 0;
+  let mirror = 0;
+  selected.forEach(repo => {
+    if (getRepoMode(repo) === 'mirror') mirror += 1;
+    else copy += 1;
+  });
+  return { total: selected.length, copy, mirror };
+}
+
+// Refresh the action button label and mirror-settings visibility based on the
+// current global default and the per-repo modes of the selected repos.
+function updateMigrationUI() {
+  const breakdown = getSelectedModeBreakdown();
+  const anySelectedMirror = breakdown.mirror > 0;
+
+  elements.mirrorSettings.hidden = !(state.migrationMode === 'mirror' || anySelectedMirror);
+
+  let label;
+  if (breakdown.total === 0) {
+    label = state.migrationMode === 'mirror' ? 'Create Live Mirrors' : 'Migrate Selected';
+  } else if (breakdown.copy > 0 && breakdown.mirror > 0) {
+    label = `Migrate ${breakdown.total} repositories (${breakdown.copy} copy, ${breakdown.mirror} live mirror)`;
+  } else if (breakdown.mirror > 0) {
+    label = breakdown.total === 1 ? 'Create Live Mirror' : `Create ${breakdown.total} Live Mirrors`;
+  } else {
+    label = `Migrate ${breakdown.total} ${breakdown.total === 1 ? 'repository' : 'repositories'}`;
+  }
+  elements.startMigrationLabel.textContent = label;
 }
 
 function setupProgressListener() {
@@ -338,13 +399,14 @@ function renderRepos(filter = '') {
           ${repo.stargazers_count}
         </span>
       </div>
+      ${renderModePill(repo)}
     </div>
   `).join('');
 
   // Add click handlers
   elements.reposList.querySelectorAll('.repo-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (!e.target.closest('.repo-checkbox')) {
+      if (!e.target.closest('.repo-checkbox') && !e.target.closest('.repo-mode-toggle')) {
         const id = parseInt(item.dataset.id);
         toggleRepo(id);
       }
@@ -371,6 +433,45 @@ window.toggleRepo = function(id) {
   
   updateSelectedCount();
   updateSelectAllState();
+};
+
+// Build the clickable per-repo mode pill showing the effective mode
+function renderModePill(repo) {
+  const mode = getRepoMode(repo);
+  if (mode === 'mirror') {
+    return `
+      <button type="button" class="repo-mode-toggle mode-mirror" onclick="toggleRepoMode(event, ${repo.id})" title="Click to switch this repository's mode">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        <span>Live mirror</span>
+      </button>
+    `;
+  }
+  return `
+    <button type="button" class="repo-mode-toggle mode-copy" onclick="toggleRepoMode(event, ${repo.id})" title="Click to switch this repository's mode">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span>One-time copy</span>
+    </button>
+  `;
+}
+
+// Toggle ONLY this repo's mode without affecting row selection
+window.toggleRepoMode = function(event, id) {
+  event.stopPropagation();
+  const repo = state.repos.find(r => r.id === id);
+  if (!repo) return;
+
+  const next = getRepoMode(repo) === 'mirror' ? 'copy' : 'mirror';
+  state.repoModes[id] = next;
+
+  renderRepos(elements.repoSearch.value);
+  updateMigrationUI();
 };
 
 // Filter repos
@@ -418,6 +519,7 @@ function updateSelectedCount() {
   elements.selectedCount.textContent = `${count} selected`;
   elements.startMigration.disabled = count === 0;
   elements.navMigrate.disabled = count === 0;
+  updateMigrationUI();
 }
 
 // Start migration
@@ -449,10 +551,15 @@ async function startMigration() {
   `).join('');
 
   updateMigrationMode();
-  const isMirrorMode = state.migrationMode === 'mirror';
-  elements.migrationSubtitle.textContent = isMirrorMode
-    ? `Creating ${selectedRepos.length} live mirrors on Gitea...`
-    : `Migrating ${selectedRepos.length} repositories to Gitea...`;
+
+  // Attach each repo's effective mode so the main process can run a mixed batch
+  selectedRepos.forEach(repo => {
+    repo.migrationMode = getRepoMode(repo);
+  });
+
+  const breakdown = getSelectedModeBreakdown();
+  const isMixed = breakdown.copy > 0 && breakdown.mirror > 0;
+  elements.migrationSubtitle.textContent = buildProcessingSubtitle(breakdown);
 
   // Start migration
   const result = await window.api.migrateRepos(
@@ -470,11 +577,28 @@ async function startMigration() {
   const successful = result.results.filter(r => r.success).length;
   const failed = result.results.filter(r => !r.success).length;
 
-  elements.migrationSubtitle.textContent = isMirrorMode
-    ? `Live mirror setup complete: ${successful} succeeded, ${failed} failed`
-    : `Migration complete: ${successful} succeeded, ${failed} failed`;
+  let completionPrefix;
+  if (isMixed) {
+    completionPrefix = `Done (${breakdown.copy} copy, ${breakdown.mirror} live mirror)`;
+  } else if (breakdown.mirror > 0) {
+    completionPrefix = 'Live mirror setup complete';
+  } else {
+    completionPrefix = 'Migration complete';
+  }
+  elements.migrationSubtitle.textContent = `${completionPrefix}: ${successful} succeeded, ${failed} failed`;
   elements.backToRepos.style.display = 'flex';
   elements.newMigration.style.display = 'flex';
+}
+
+// Subtitle shown while a (possibly mixed) batch is processing
+function buildProcessingSubtitle(breakdown) {
+  if (breakdown.copy > 0 && breakdown.mirror > 0) {
+    return `Processing ${breakdown.total} repositories on Gitea (${breakdown.copy} copy, ${breakdown.mirror} live mirror)...`;
+  }
+  if (breakdown.mirror > 0) {
+    return `Creating ${breakdown.total} live ${breakdown.total === 1 ? 'mirror' : 'mirrors'} on Gitea...`;
+  }
+  return `Migrating ${breakdown.total} ${breakdown.total === 1 ? 'repository' : 'repositories'} to Gitea...`;
 }
 
 // Update migration progress

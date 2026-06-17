@@ -258,6 +258,8 @@ a:hover {
   border-radius: var(--radius-xl);
   overflow: hidden;
   transition: all var(--transition-normal);
+  display: flex;
+  flex-direction: column;
 }
 
 .connection-card:hover {
@@ -342,6 +344,77 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+}
+
+.card-body .btn {
+  margin-top: auto;
+}
+
+/* Token warning note */
+.token-warning {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  background: var(--accent-orange-bg);
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.token-warning svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--accent-orange);
+}
+
+.token-warning strong {
+  color: var(--text-primary);
+}
+
+/* Privacy note */
+.privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 900px;
+  margin-top: 24px;
+  padding: 18px 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-left: 3px solid var(--accent-green);
+  border-radius: var(--radius-lg);
+}
+
+.privacy-note > svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--accent-green);
+  margin-top: 2px;
+}
+
+.privacy-note-text strong {
+  display: block;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.privacy-note-text p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.privacy-note-text strong + p strong,
+.privacy-note-text p strong {
+  display: inline;
+  font-size: inherit;
+  color: var(--text-primary);
 }
 
 /* Form Elements */
@@ -618,10 +691,65 @@ input::placeholder {
   box-shadow: 0 0 0 3px var(--accent-blue-bg);
 }
 
+.mode-hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .mirror-settings {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border-primary);
+}
+
+/* Repos list header (Select All / count) */
+.repos-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+/* Per-repo mode toggle pill */
+.repo-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.repo-mode-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.repo-mode-toggle.mode-copy {
+  background: var(--accent-blue-bg);
+  border-color: rgba(88, 166, 255, 0.4);
+  color: var(--accent-blue);
+}
+
+.repo-mode-toggle.mode-mirror {
+  background: var(--accent-purple-bg);
+  border-color: rgba(163, 113, 247, 0.4);
+  color: var(--accent-purple);
+}
+
+.repo-mode-toggle:hover {
+  filter: brightness(1.15);
 }
 
 .checkbox-label {

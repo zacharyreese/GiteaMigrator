@@ -129,7 +129,7 @@ ipcMain.handle('github:fetchRepos', async (event, token) => {
     let hasMore = true;
 
     while (hasMore) {
-      const response = await fetch(`https://api.github.com/user/repos?per_page=100&page=${page}&affiliation=owner`, {
+      const response = await fetch(`https://api.github.com/user/repos?per_page=100&page=${page}&affiliation=owner&visibility=all`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.github.v3+json',
@@ -212,7 +212,8 @@ ipcMain.handle('gitea:validateConnection', async (event, { url, token }) => {
 ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToken, repos, mode = 'copy', mirrorInterval = '10m' }) => {
   const results = [];
   const tempDir = path.join(os.tmpdir(), 'gitea-migrator');
-  const isLiveMirror = mode === 'mirror';
+  // A one-time copy needs a local temp clone; only create it when at least one repo uses copy mode.
+  const hasCopyRepo = repos.some(repo => (repo.migrationMode || mode) === 'copy');
   let giteaUser;
 
   try {
@@ -227,12 +228,13 @@ ipcMain.handle('migrate:repos', async (event, { githubToken, giteaUrl, giteaToke
   }
 
   // Ensure temp directory exists
-  if (!isLiveMirror && !fs.existsSync(tempDir)) {
+  if (hasCopyRepo && !fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
   for (const repo of repos) {
     const repoDir = path.join(tempDir, repo.name);
+    const isLiveMirror = (repo.migrationMode || mode) === 'mirror';
 
     try {
       if (isLiveMirror) {

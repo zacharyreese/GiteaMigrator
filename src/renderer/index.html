@@ -89,7 +89,7 @@
               <div class="input-group">
                 <label for="github-token">Personal Access Token</label>
                 <div class="input-wrapper">
-                  <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off">
+                  <input type="password" id="github-token" placeholder="github_pat_xxxxxxxxxxxx" autocomplete="off">
                   <button type="button" class="toggle-visibility" data-target="github-token">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -97,7 +97,16 @@
                     </svg>
                   </button>
                 </div>
-                <small>Need a token? <a href="#" id="github-token-help">Create one on GitHub</a></small>
+                <small>Need a token? <a href="#" id="github-token-help">Create a fine-grained token on GitHub</a></small>
+                <small>Set <strong>Repository access</strong> to <strong>All repositories</strong> (or select your private repos), then grant <code>Contents</code> (read) + <code>Metadata</code> (read) &mdash; otherwise only public repos appear.</small>
+              </div>
+              <div class="token-warning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span>For <strong>Live mirror</strong> mode, keep this token valid &mdash; Gitea stores and reuses it to fetch new commits. If you set an expiration, rotate it before it lapses, or choose <strong>No expiration</strong> for an uninterrupted mirror. A one-time copy doesn't need the token after migrating.</span>
               </div>
               <button class="btn btn-primary" id="connect-github">
                 <span>Connect GitHub</span>
@@ -140,7 +149,8 @@
                     </svg>
                   </button>
                 </div>
-                <small class="scope-info">Required scopes: <code>read:user</code>, <code>write:repository</code></small>
+                <small class="scope-info">Required scopes: <code>write:user</code>, <code>write:repository</code></small>
+                <small>Create one at <a href="#" id="gitea-token-help"><span id="gitea-token-help-url">&lt;your-instance&gt;/user/settings/applications</span></a></small>
               </div>
               <button class="btn btn-primary" id="connect-gitea">
                 <span>Connect Gitea</span>
@@ -149,6 +159,17 @@
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+
+        <div class="privacy-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <div class="privacy-note-text">
+            <strong>Your tokens never leave your device.</strong>
+            <p>They are kept in memory only, never written to disk, and are sent only to GitHub and your own Gitea instance. The one exception: in <strong>Live Mirror</strong> mode the GitHub token is intentionally sent to your Gitea instance so it can keep syncing new commits.</p>
           </div>
         </div>
 
@@ -177,14 +198,6 @@
             </svg>
             <input type="text" id="repo-search" placeholder="Search repositories...">
           </div>
-          <div class="toolbar-actions">
-            <label class="checkbox-label select-all">
-              <input type="checkbox" id="select-all">
-              <span class="checkmark"></span>
-              <span>Select All</span>
-            </label>
-            <span class="selected-count" id="selected-count">0 selected</span>
-          </div>
         </div>
 
         <div class="migration-options">
@@ -205,6 +218,8 @@
             </label>
           </div>
 
+          <p class="mode-hint">This is the default for every repository &mdash; you can switch any repository individually using the toggle on its row below.</p>
+
           <div class="mirror-settings" id="mirror-settings" hidden>
             <div class="input-group">
               <label for="mirror-interval">Mirror interval</label>
@@ -212,6 +227,15 @@
               <small>Gitea enforces the instance minimum interval, usually <code>10m</code>. Live mirrors can only be created for new Gitea repositories.</small>
             </div>
           </div>
+        </div>
+
+        <div class="repos-list-header">
+          <label class="checkbox-label select-all">
+            <input type="checkbox" id="select-all">
+            <span class="checkmark"></span>
+            <span>Select All</span>
+          </label>
+          <span class="selected-count" id="selected-count">0 selected</span>
         </div>
 
         <div class="repos-list" id="repos-list">
